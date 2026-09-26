@@ -1,22 +1,63 @@
+import json
 import os
 from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 app = Flask(__name__)
 
-
-# ============================================================
-# TEMPORARY DEVICE STORAGE
-# ============================================================
-# This stores registered devices while the Render server is
-# running.
-#
-# Later we will move this to a proper database so devices
-# survive server restarts/redeployments.
-# ============================================================
-
 devices = {}
+
+
+# ============================================================
+# FIREBASE INITIALIZATION
+# ============================================================
+
+def initialize_firebase():
+
+    if firebase_admin._apps:
+        return
+
+    service_account_json = os.environ.get(
+        "FIREBASE_SERVICE_ACCOUNT_JSON"
+    )
+
+    if not service_account_json:
+        raise RuntimeError(
+            "FIREBASE_SERVICE_ACCOUNT_JSON environment variable is missing"
+        )
+
+    try:
+        service_account_info = json.loads(
+            service_account_json
+        )
+
+        credential = credentials.Certificate(
+            service_account_info
+        )
+
+        firebase_admin.initialize_app(
+            credential
+        )
+
+        print("================================")
+        print("FIREBASE ADMIN INITIALIZED")
+        print("================================")
+
+    except Exception as e:
+
+        print("================================")
+        print("FIREBASE ADMIN INITIALIZATION FAILED")
+        print("================================")
+        print(str(e))
+        print("================================")
+
+        raise
+
+
+initialize_firebase()
 
 
 # ============================================================
@@ -25,11 +66,12 @@ devices = {}
 
 @app.route("/")
 def home():
+
     return "SBAGOFX Server is running"
 
 
 # ============================================================
-# REGISTER ANDROID DEVICE
+# DEVICE REGISTRATION
 # ============================================================
 
 @app.route("/api/devices", methods=["POST"])
@@ -38,14 +80,21 @@ def register_device():
     data = request.get_json(silent=True)
 
     if not data:
+
         return jsonify({
             "status": "error",
             "message": "No JSON data received"
         }), 400
 
     installation_id = data.get("installationId")
-    platform = data.get("platform", "unknown")
-    app_version = data.get("appVersion", "unknown")
+    platform = data.get(
+        "platform",
+        "unknown"
+    )
+    app_version = data.get(
+        "appVersion",
+        "unknown"
+    )
 
     if not installation_id:
 
@@ -54,49 +103,85 @@ def register_device():
             "message": "installationId is required"
         }), 400
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(
+        timezone.utc
+    ).isoformat()
 
     devices[installation_id] = {
+
         "installationId": installation_id,
+
         "platform": platform,
+
         "appVersion": app_version,
+
         "lastSeen": now
     }
 
     print("================================")
     print("SBAGOFX DEVICE REGISTERED")
     print("================================")
-    print("Installation ID:", installation_id)
-    print("Platform:", platform)
-    print("App Version:", app_version)
-    print("Last Seen:", now)
-    print("Total Devices:", len(devices))
+    print(
+        "Installation ID:",
+        installation_id
+    )
+    print(
+        "Platform:",
+        platform
+    )
+    print(
+        "App Version:",
+        app_version
+    )
+    print(
+        "Last Seen:",
+        now
+    )
+    print(
+        "Total Devices:",
+        len(devices)
+    )
     print("================================")
 
     return jsonify({
+
         "status": "success",
-        "message": "Device registered successfully",
-        "installationId": installation_id,
-        "platform": platform,
-        "appVersion": app_version,
-        "lastSeen": now
+
+        "message":
+            "Device registered successfully",
+
+        "installationId":
+            installation_id,
+
+        "platform":
+            platform,
+
+        "appVersion":
+            app_version,
+
+        "lastSeen":
+            now
+
     }), 200
 
 
 # ============================================================
-# RECEIVE TRADING SIGNAL FROM MT5
+# RECEIVE MT5 SIGNAL
 # ============================================================
 
 @app.route("/api/signal", methods=["POST"])
 def signal():
 
-    data = request.get_json(silent=True)
+    data = request.get_json(
+        silent=True
+    )
 
     if not data:
 
         return jsonify({
             "status": "error",
-            "message": "No JSON signal received"
+            "message":
+                "No JSON signal received"
         }), 400
 
     print("================================")
@@ -106,14 +191,150 @@ def signal():
     print("================================")
 
     return jsonify({
+
         "status": "success",
-        "message": "Signal received by SBAGOFX",
-        "signal": data
+
+        "message":
+            "Signal received by SBAGOFX",
+
+        "signal":
+            data
+
     }), 200
 
 
 # ============================================================
-# SERVER START
+# TEST PUSH NOTIFICATION
+# ============================================================
+
+@app.route(
+    "/api/test-alert",
+    methods=["POST"]
+)
+def test_alert():
+
+    data = request.get_json(
+        silent=True
+    )
+
+    if not data:
+
+        return jsonify({
+            "status": "error",
+            "message":
+                "No JSON data received"
+        }), 400
+
+    installation_id = data.get(
+        "installationId"
+    )
+
+    if not installation_id:
+
+        return jsonify({
+            "status": "error",
+            "message":
+                "installationId is required"
+        }), 400
+
+    if installation_id not in devices:
+
+        return jsonify({
+
+            "status": "error",
+
+            "message":
+                "Device is not registered",
+
+            "installationId":
+                installation_id
+
+        }), 404
+
+    try:
+
+        message = messaging.Message(
+
+            notification=messaging.Notification(
+
+                title="🔴 SBAGOFX SELL ALERT",
+
+                body=(
+                    "XAUUSD M5 — "
+                    "Shift confirmed"
+                )
+            ),
+
+            data={
+
+                "symbol": "XAUUSD",
+
+                "timeframe": "M5",
+
+                "direction": "SELL",
+
+                "shiftLevel": "3648.20"
+
+            },
+
+            fid=installation_id
+        )
+
+        response = messaging.send(
+            message
+        )
+
+        print("================================")
+        print("SBAGOFX TEST PUSH SENT")
+        print("================================")
+        print(
+            "Installation ID:",
+            installation_id
+        )
+        print(
+            "Firebase Response:",
+            response
+        )
+        print("================================")
+
+        return jsonify({
+
+            "status": "success",
+
+            "message":
+                "Test push notification sent",
+
+            "firebaseResponse":
+                response,
+
+            "installationId":
+                installation_id
+
+        }), 200
+
+    except Exception as e:
+
+        print("================================")
+        print("SBAGOFX PUSH FAILED")
+        print("================================")
+        print(str(e))
+        print("================================")
+
+        return jsonify({
+
+            "status": "error",
+
+            "message":
+                "Failed to send push notification",
+
+            "error":
+                str(e)
+
+        }), 500
+
+
+# ============================================================
+# START SERVER
 # ============================================================
 
 if __name__ == "__main__":
