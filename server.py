@@ -39,15 +39,6 @@ def initialize_firebase():
     )
 
     if not service_account_json:
-
-        print("================================")
-        print("FIREBASE ADMIN INITIALIZATION FAILED")
-        print("================================")
-        print(
-            "FIREBASE_SERVICE_ACCOUNT_JSON is missing"
-        )
-        print("================================")
-
         raise RuntimeError(
             "FIREBASE_SERVICE_ACCOUNT_JSON environment variable is missing"
         )
@@ -111,12 +102,8 @@ def register_device():
     if not data:
 
         return jsonify({
-
             "status": "error",
-
-            "message":
-                "No JSON data received"
-
+            "message": "No JSON data received"
         }), 400
 
     installation_id = data.get(
@@ -136,12 +123,8 @@ def register_device():
     if not installation_id:
 
         return jsonify({
-
             "status": "error",
-
-            "message":
-                "installationId is required"
-
+            "message": "installationId is required"
         }), 400
 
     now = datetime.now(
@@ -218,6 +201,167 @@ def register_device():
 
 
 # ============================================================
+# SEND SIGNAL TO REGISTERED DEVICES
+# ============================================================
+
+def send_signal_notification(
+    direction,
+    symbol,
+    timeframe,
+    shift_level,
+    reason
+):
+
+    if not devices:
+
+        print("================================")
+        print("NO REGISTERED DEVICES")
+        print("================================")
+
+        return {
+
+            "sent":
+                0,
+
+            "failed":
+                0,
+
+            "message":
+                "No registered devices"
+
+        }
+
+    sent = 0
+    failed = 0
+
+    for installation_id in list(
+        devices.keys()
+    ):
+
+        try:
+
+            if direction == "BUY":
+
+                title = "🟢 SBAGOFX BUY ALERT"
+
+            elif direction == "SELL":
+
+                title = "🔴 SBAGOFX SELL ALERT"
+
+            else:
+
+                title = "SBAGOFX TRADING ALERT"
+
+            body = (
+                f"{symbol} {timeframe} - "
+                f"{reason}"
+            )
+
+            message = messaging.Message(
+
+                notification=messaging.Notification(
+
+                    title=title,
+
+                    body=body
+                ),
+
+                data={
+
+                    "symbol":
+                        str(symbol),
+
+                    "timeframe":
+                        str(timeframe),
+
+                    "direction":
+                        str(direction),
+
+                    "shiftLevel":
+                        str(shift_level),
+
+                    "reason":
+                        str(reason)
+
+                },
+
+                fid=installation_id
+            )
+
+            response = messaging.send(
+                message
+            )
+
+            print("================================")
+            print("SBAGOFX SIGNAL PUSH SENT")
+            print("================================")
+
+            print(
+                "Installation ID:",
+                installation_id
+            )
+
+            print(
+                "Direction:",
+                direction
+            )
+
+            print(
+                "Symbol:",
+                symbol
+            )
+
+            print(
+                "Timeframe:",
+                timeframe
+            )
+
+            print(
+                "Shift Level:",
+                shift_level
+            )
+
+            print(
+                "Firebase Response:",
+                response
+            )
+
+            print("================================")
+
+            sent += 1
+
+        except Exception as e:
+
+            failed += 1
+
+            print("================================")
+            print("SBAGOFX SIGNAL PUSH FAILED")
+            print("================================")
+
+            print(
+                "Installation ID:",
+                installation_id
+            )
+
+            print(
+                "Error:",
+                str(e)
+            )
+
+            print("================================")
+
+    return {
+
+        "sent":
+            sent,
+
+        "failed":
+            failed
+
+    }
+
+
+# ============================================================
 # RECEIVE MT5 SIGNAL
 # ============================================================
 
@@ -243,13 +387,96 @@ def signal():
 
         }), 400
 
+    direction = str(
+        data.get(
+            "direction",
+            ""
+        )
+    ).upper()
+
+    symbol = data.get(
+        "symbol",
+        "UNKNOWN"
+    )
+
+    timeframe = data.get(
+        "timeframe",
+        "UNKNOWN"
+    )
+
+    shift_level = data.get(
+        "shiftLevel",
+        0
+    )
+
+    reason = data.get(
+        "reason",
+        "Trading signal confirmed"
+    )
+
+    if direction not in [
+        "BUY",
+        "SELL"
+    ]:
+
+        return jsonify({
+
+            "status":
+                "error",
+
+            "message":
+                "direction must be BUY or SELL"
+
+        }), 400
+
     print("================================")
     print("SBAGOFX SIGNAL RECEIVED")
     print("================================")
 
-    print(data)
+    print(
+        "Direction:",
+        direction
+    )
+
+    print(
+        "Symbol:",
+        symbol
+    )
+
+    print(
+        "Timeframe:",
+        timeframe
+    )
+
+    print(
+        "Shift Level:",
+        shift_level
+    )
+
+    print(
+        "Reason:",
+        reason
+    )
 
     print("================================")
+
+    result = send_signal_notification(
+
+        direction=
+            direction,
+
+        symbol=
+            symbol,
+
+        timeframe=
+            timeframe,
+
+        shift_level=
+            shift_level,
+
+        reason=
+            reason
+    )
 
     return jsonify({
 
@@ -257,10 +484,29 @@ def signal():
             "success",
 
         "message":
-            "Signal received by SBAGOFX",
+            "Signal received and processed",
 
-        "signal":
-            data
+        "signal": {
+
+            "direction":
+                direction,
+
+            "symbol":
+                symbol,
+
+            "timeframe":
+                timeframe,
+
+            "shiftLevel":
+                shift_level,
+
+            "reason":
+                reason
+
+        },
+
+        "notifications":
+            result
 
     }), 200
 
@@ -328,12 +574,11 @@ def test_alert():
 
             notification=messaging.Notification(
 
-                title="SBAGOFX SELL ALERT",
+                title=
+                    "SBAGOFX SELL ALERT",
 
-                body=(
-                    "XAUUSD M5 - "
-                    "Shift confirmed"
-                )
+                body=
+                    "XAUUSD M5 - Shift confirmed"
             ),
 
             data={
@@ -348,7 +593,10 @@ def test_alert():
                     "SELL",
 
                 "shiftLevel":
-                    "3648.20"
+                    "3648.20",
+
+                "reason":
+                    "Session high swept - bearish shift confirmed"
 
             },
 
