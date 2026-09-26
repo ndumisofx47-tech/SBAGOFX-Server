@@ -3,21 +3,35 @@ import os
 from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify
+
 import firebase_admin
 from firebase_admin import credentials, messaging
 
+
+# ============================================================
+# FLASK APP
+# ============================================================
+
 app = Flask(__name__)
+
+
+# ============================================================
+# TEMPORARY DEVICE STORAGE
+# ============================================================
 
 devices = {}
 
 
 # ============================================================
-# FIREBASE INITIALIZATION
+# FIREBASE ADMIN INITIALIZATION
 # ============================================================
 
 def initialize_firebase():
 
     if firebase_admin._apps:
+        print("================================")
+        print("FIREBASE ADMIN ALREADY INITIALIZED")
+        print("================================")
         return
 
     service_account_json = os.environ.get(
@@ -25,11 +39,21 @@ def initialize_firebase():
     )
 
     if not service_account_json:
+
+        print("================================")
+        print("FIREBASE ADMIN INITIALIZATION FAILED")
+        print("================================")
+        print(
+            "FIREBASE_SERVICE_ACCOUNT_JSON is missing"
+        )
+        print("================================")
+
         raise RuntimeError(
             "FIREBASE_SERVICE_ACCOUNT_JSON environment variable is missing"
         )
 
     try:
+
         service_account_info = json.loads(
             service_account_json
         )
@@ -64,33 +88,46 @@ initialize_firebase()
 # HOME
 # ============================================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
 
-    return "SBAGOFX Server is running"
+    return "SBAGOFX Server is running", 200
 
 
 # ============================================================
 # DEVICE REGISTRATION
 # ============================================================
 
-@app.route("/api/devices", methods=["POST"])
+@app.route(
+    "/api/devices",
+    methods=["POST"]
+)
 def register_device():
 
-    data = request.get_json(silent=True)
+    data = request.get_json(
+        silent=True
+    )
 
     if not data:
 
         return jsonify({
+
             "status": "error",
-            "message": "No JSON data received"
+
+            "message":
+                "No JSON data received"
+
         }), 400
 
-    installation_id = data.get("installationId")
+    installation_id = data.get(
+        "installationId"
+    )
+
     platform = data.get(
         "platform",
         "unknown"
     )
+
     app_version = data.get(
         "appVersion",
         "unknown"
@@ -99,8 +136,12 @@ def register_device():
     if not installation_id:
 
         return jsonify({
+
             "status": "error",
-            "message": "installationId is required"
+
+            "message":
+                "installationId is required"
+
         }), 400
 
     now = datetime.now(
@@ -109,43 +150,54 @@ def register_device():
 
     devices[installation_id] = {
 
-        "installationId": installation_id,
+        "installationId":
+            installation_id,
 
-        "platform": platform,
+        "platform":
+            platform,
 
-        "appVersion": app_version,
+        "appVersion":
+            app_version,
 
-        "lastSeen": now
+        "lastSeen":
+            now
     }
 
     print("================================")
     print("SBAGOFX DEVICE REGISTERED")
     print("================================")
+
     print(
         "Installation ID:",
         installation_id
     )
+
     print(
         "Platform:",
         platform
     )
+
     print(
         "App Version:",
         app_version
     )
+
     print(
         "Last Seen:",
         now
     )
+
     print(
         "Total Devices:",
         len(devices)
     )
+
     print("================================")
 
     return jsonify({
 
-        "status": "success",
+        "status":
+            "success",
 
         "message":
             "Device registered successfully",
@@ -169,7 +221,10 @@ def register_device():
 # RECEIVE MT5 SIGNAL
 # ============================================================
 
-@app.route("/api/signal", methods=["POST"])
+@app.route(
+    "/api/signal",
+    methods=["POST"]
+)
 def signal():
 
     data = request.get_json(
@@ -179,20 +234,27 @@ def signal():
     if not data:
 
         return jsonify({
-            "status": "error",
+
+            "status":
+                "error",
+
             "message":
                 "No JSON signal received"
+
         }), 400
 
     print("================================")
     print("SBAGOFX SIGNAL RECEIVED")
     print("================================")
+
     print(data)
+
     print("================================")
 
     return jsonify({
 
-        "status": "success",
+        "status":
+            "success",
 
         "message":
             "Signal received by SBAGOFX",
@@ -220,9 +282,13 @@ def test_alert():
     if not data:
 
         return jsonify({
-            "status": "error",
+
+            "status":
+                "error",
+
             "message":
                 "No JSON data received"
+
         }), 400
 
     installation_id = data.get(
@@ -232,16 +298,21 @@ def test_alert():
     if not installation_id:
 
         return jsonify({
-            "status": "error",
+
+            "status":
+                "error",
+
             "message":
                 "installationId is required"
+
         }), 400
 
     if installation_id not in devices:
 
         return jsonify({
 
-            "status": "error",
+            "status":
+                "error",
 
             "message":
                 "Device is not registered",
@@ -257,23 +328,27 @@ def test_alert():
 
             notification=messaging.Notification(
 
-                title="🔴 SBAGOFX SELL ALERT",
+                title="SBAGOFX SELL ALERT",
 
                 body=(
-                    "XAUUSD M5 — "
+                    "XAUUSD M5 - "
                     "Shift confirmed"
                 )
             ),
 
             data={
 
-                "symbol": "XAUUSD",
+                "symbol":
+                    "XAUUSD",
 
-                "timeframe": "M5",
+                "timeframe":
+                    "M5",
 
-                "direction": "SELL",
+                "direction":
+                    "SELL",
 
-                "shiftLevel": "3648.20"
+                "shiftLevel":
+                    "3648.20"
 
             },
 
@@ -287,19 +362,23 @@ def test_alert():
         print("================================")
         print("SBAGOFX TEST PUSH SENT")
         print("================================")
+
         print(
             "Installation ID:",
             installation_id
         )
+
         print(
             "Firebase Response:",
             response
         )
+
         print("================================")
 
         return jsonify({
 
-            "status": "success",
+            "status":
+                "success",
 
             "message":
                 "Test push notification sent",
@@ -317,12 +396,18 @@ def test_alert():
         print("================================")
         print("SBAGOFX PUSH FAILED")
         print("================================")
-        print(str(e))
+
+        print(
+            "Error:",
+            str(e)
+        )
+
         print("================================")
 
         return jsonify({
 
-            "status": "error",
+            "status":
+                "error",
 
             "message":
                 "Failed to send push notification",
@@ -331,6 +416,43 @@ def test_alert():
                 str(e)
 
         }), 500
+
+
+# ============================================================
+# ROUTE DIAGNOSTIC
+# ============================================================
+
+@app.route(
+    "/api/routes",
+    methods=["GET"]
+)
+def list_routes():
+
+    routes = []
+
+    for rule in app.url_map.iter_rules():
+
+        routes.append({
+
+            "route":
+                str(rule),
+
+            "methods":
+                sorted(
+                    list(rule.methods)
+                )
+
+        })
+
+    return jsonify({
+
+        "status":
+            "success",
+
+        "routes":
+            routes
+
+    }), 200
 
 
 # ============================================================
