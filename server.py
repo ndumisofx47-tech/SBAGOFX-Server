@@ -29,9 +29,11 @@ devices = {}
 def initialize_firebase():
 
     if firebase_admin._apps:
+
         print("================================")
         print("FIREBASE ADMIN ALREADY INITIALIZED")
         print("================================")
+
         return
 
     service_account_json = os.environ.get(
@@ -39,6 +41,7 @@ def initialize_firebase():
     )
 
     if not service_account_json:
+
         raise RuntimeError(
             "FIREBASE_SERVICE_ACCOUNT_JSON environment variable is missing"
         )
@@ -201,7 +204,7 @@ def register_device():
 
 
 # ============================================================
-# SEND SIGNAL TO REGISTERED DEVICES
+# SEND DATA-ONLY SIGNAL TO REGISTERED DEVICES
 # ============================================================
 
 def send_signal_notification(
@@ -220,15 +223,12 @@ def send_signal_notification(
 
         return {
 
-            "sent":
-                0,
+            "sent": 0,
 
-            "failed":
-                0,
+            "failed": 0,
 
             "message":
                 "No registered devices"
-
         }
 
     sent = 0
@@ -242,11 +242,11 @@ def send_signal_notification(
 
             if direction == "BUY":
 
-                title = "🟢 SBAGOFX BUY ALERT"
+                title = "SBAGOFX BUY ALERT"
 
             elif direction == "SELL":
 
-                title = "🔴 SBAGOFX SELL ALERT"
+                title = "SBAGOFX SELL ALERT"
 
             else:
 
@@ -254,19 +254,38 @@ def send_signal_notification(
 
             body = (
                 f"{symbol} {timeframe} - "
-                f"{reason}"
+                f"{reason} - "
+                f"Shift Level: {shift_level}"
             )
+
+            # =================================================
+            # IMPORTANT:
+            #
+            # DATA-ONLY FIREBASE MESSAGE
+            #
+            # We intentionally DO NOT use:
+            #
+            # notification=messaging.Notification(...)
+            #
+            # Android will therefore pass the message to
+            # SBAGOFXFirebaseMessagingService.onMessageReceived()
+            #
+            # The Android app then:
+            #
+            # 1. Saves the signal to SignalStore
+            # 2. Updates the dashboard
+            # 3. Creates the notification
+            # =================================================
 
             message = messaging.Message(
 
-                notification=messaging.Notification(
-
-                    title=title,
-
-                    body=body
-                ),
-
                 data={
+
+                    "title":
+                        str(title),
+
+                    "body":
+                        str(body),
 
                     "symbol":
                         str(symbol),
@@ -293,7 +312,7 @@ def send_signal_notification(
             )
 
             print("================================")
-            print("SBAGOFX SIGNAL PUSH SENT")
+            print("SBAGOFX DATA SIGNAL SENT")
             print("================================")
 
             print(
@@ -352,17 +371,14 @@ def send_signal_notification(
 
     return {
 
-        "sent":
-            sent,
+        "sent": sent,
 
-        "failed":
-            failed
-
+        "failed": failed
     }
 
 
 # ============================================================
-# RECEIVE MT5 SIGNAL
+# RECEIVE TRADING SIGNAL
 # ============================================================
 
 @app.route(
@@ -512,7 +528,7 @@ def signal():
 
 
 # ============================================================
-# TEST PUSH NOTIFICATION
+# TEST ALERT
 # ============================================================
 
 @app.route(
@@ -570,18 +586,17 @@ def test_alert():
 
     try:
 
+        # Data-only test message
+
         message = messaging.Message(
 
-            notification=messaging.Notification(
+            data={
 
-                title=
+                "title":
                     "SBAGOFX SELL ALERT",
 
-                body=
-                    "XAUUSD M5 - Shift confirmed"
-            ),
-
-            data={
+                "body":
+                    "XAUUSD M5 - Shift confirmed",
 
                 "symbol":
                     "XAUUSD",
@@ -608,7 +623,7 @@ def test_alert():
         )
 
         print("================================")
-        print("SBAGOFX TEST PUSH SENT")
+        print("SBAGOFX TEST DATA PUSH SENT")
         print("================================")
 
         print(
@@ -629,7 +644,7 @@ def test_alert():
                 "success",
 
             "message":
-                "Test push notification sent",
+                "Test data notification sent",
 
             "firebaseResponse":
                 response,
